@@ -60,8 +60,8 @@ String = List Σ
 ε : String
 ε = []
 
-singleton : Σ → String
-singleton c = c ∷ []
+σ : Σ → String
+σ c = c ∷ []
 
 Language : Set₁
 Language = Subset String

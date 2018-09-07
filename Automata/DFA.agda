@@ -4,6 +4,7 @@ open import Data.Unit using (⊤; tt)
 open import Data.Empty using (⊥-elim)
 open import Data.List using (List; foldr)
 open List
+open import Data.Sum using (_⊎_) renaming (map to ⊎-map)
 open import Data.Product using (Σ; _×_; _,_; Σ-syntax; zip) renaming (map to ×-map)
 open Σ
 open import Data.Fin using (Fin; #_) renaming (_≟_ to _≟-fin_)
@@ -11,8 +12,9 @@ open Fin
 
 open import Relation.Nullary using (¬_; Dec)
 open Dec
-open import Relation.Unary using (Decidable; _∈_; ∅; _⊆_; _∩_; _⟨×⟩_; ｛_｝)
-open import Relation.Unary.Properties using (∅?; _×?_)
+open import Relation.Nullary.Sum using (_⊎-dec_)
+open import Relation.Unary using (Decidable; _∈_; ∅; ｛_｝; U; _⊆_; _∪_; _⟨⊎⟩_; _∩_; _⟨×⟩_)
+open import Relation.Unary.Properties using (∅?; _⊎?_; _×?_)
 open import Relation.Binary using () renaming (Decidable to Decidable₂)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong₂; inspect; [_])
 
@@ -93,11 +95,11 @@ regular lang = Σ[ d ∈ DFA ] (d recognizes lang)
     backward {[]} refl = refl
     backward {_ ∷ _} ()
 
-singleton-regular : ∀ c → regular ｛ singleton c ｝
-singleton-regular c = single , single-rec
+σ-regular : ∀ c → regular ｛ σ c ｝
+σ-regular c = sigma , sigma-rec
   where
-  single : DFA
-  single = ⟨ Q , δ , q₀ , F , F? ⟩
+  sigma : DFA
+  sigma = ⟨ Q , δ , q₀ , F , F? ⟩
     where
     Q = Fin 3
     δ : Σ → Fin 3 → Fin 3
@@ -109,10 +111,10 @@ singleton-regular c = single , single-rec
     F  = λ q → q ≡ # 2
     F? = λ q → q ≟-fin # 2
 
-  single-rec : single recognizes ｛ singleton c ｝
-  single-rec = record { A⊆B = forward ; B⊆A = backward }
+  sigma-rec : sigma recognizes ｛ σ c ｝
+  sigma-rec = record { A⊆B = forward ; B⊆A = backward }
     where
-    open DFA single using (δ̂; q₀)
+    open DFA sigma using (δ̂; q₀)
 
     lemma : ∀ w ws → ¬ (δ̂ (w ∷ ws) q₀ ≡ zero)
     lemma w ws _ with δ̂ ws q₀
@@ -121,7 +123,7 @@ singleton-regular c = single , single-rec
     lemma w ws () | zero | no _
     lemma w ws () | suc _
 
-    forward : accepts single ⊆ ｛ singleton c ｝
+    forward : accepts sigma ⊆ ｛ σ c ｝
     forward {[]} ()
     forward {a ∷ []} _ with a ≟ c
     forward {a ∷ []} refl | yes refl = refl
@@ -130,44 +132,77 @@ singleton-regular c = single , single-rec
     forward {a ∷ b ∷ ws} acc | zero  | [ δ̂≡zero ] = ⊥-elim (lemma b ws δ̂≡zero)
     forward {a ∷ b ∷ ws} ()  | suc _ | _
 
-    backward : ｛ singleton c ｝ ⊆ accepts single
+    backward : ｛ σ c ｝ ⊆ accepts sigma
     backward {[]} ()
     backward {a ∷ []} refl with a ≟ c
     ... | yes a≡c = refl
     ... | no ¬a≡c = ⊥-elim (¬a≡c refl)
     backward {a ∷ b ∷ ws} ()
 
--- ∩-regular : ∀ {A B : Language} → regular A → regular B → regular (A ∩ B)
--- ∩-regular {A} {B}
---   (dfa-A@(⟨ Q₁ , δ₁ , q₁ , F₁ , F₁? ⟩) , rec-A)
---   (dfa-B@(⟨ Q₂ , δ₂ , q₂ , F₂ , F₂? ⟩) , rec-B) =
---   (dfa-A∩B , rec-A∩B)
---   where
---   dfa-A∩B : DFA
---   dfa-A∩B = record
---     { Q = Q₁ × Q₂
---     ; δ = λ a → ×-map (δ₁ a) (δ₂ a)
---     ; q₀ = q₁ , q₂
---     ; F = F₁ ⟨×⟩ F₂
---     ; F? =  F₁? ×? F₂?
---     }
+∪-regular : ∀ {A B : Language} → regular A → regular B → regular (A ∪ B)
+∪-regular {A} {B} (dfa-A , rec-A) (dfa-B , rec-B) = (dfa-A∪B , rec-A∪B)
+  where
+  open DFA dfa-A using ()
+    renaming (Q to Q₁; δ to δ₁; q₀ to q₁; F to F₁; F? to F₁?; δ̂ to δ̂₁)
+  open DFA dfa-B using ()
+    renaming (Q to Q₂; δ to δ₂; q₀ to q₂; F to F₂; F? to F₂?; δ̂ to δ̂₂)
 
---   open _≈_ rec-A renaming (A⊆B to accepts-A⊆A; B⊆A to A⊆accepts-A)
---   open _≈_ rec-B renaming (A⊆B to accepts-B⊆B; B⊆A to B⊆accepts-B)
+  dfa-A∪B : DFA
+  dfa-A∪B = record
+    { Q  = Q₁ × Q₂
+    ; δ  = λ a → ×-map (δ₁ a) (δ₂ a)
+    ; q₀ = q₁ , q₂
+    ; F  = λ { (q , r) → q ∈ F₁ ⊎ r ∈ F₂ }
+    ; F? = λ { (q , r) → F₁? q ⊎-dec F₂? r }
+    }
+  open DFA dfa-A∪B using (δ̂; q₀)
 
---   rec-A∩B : dfa-A∩B recognizes A ∩ B
---   rec-A∩B = record { A⊆B = forward ; B⊆A = backward }
---     where
---     -- lemma : ∀ ws → accepts dfa-A∩B ws → accepts dfa-A ws × accepts dfa-B ws
---     -- lemma [] acc-A∩B = acc-A∩B
---     -- lemma (w ∷ ws) (fst , snd) =
---     --   ×-map (λ accepts-A-ws → {!!})
---     --         (λ accepts-B-ws → {!!})
---     --         (lemma ws {!!})
+  parallel : ∀ ws → δ̂ ws q₀ ≡ (δ̂₁ ws q₁ , δ̂₂ ws q₂)
+  parallel [] = refl
+  parallel (w ∷ ws) rewrite parallel ws = refl
 
---     forward : accepts dfa-A∩B ⊆ A ∩ B
---     forward {[]} = ×-map accepts-A⊆A accepts-B⊆B
---     forward {x ∷ ws} accepts-A∩B = zip {!!} {!!} accepts-A∩B (forward {ws} {!!})
+  open _≈_ rec-A renaming (A⊆B to accepts-A⊆A; B⊆A to A⊆accepts-A)
+  open _≈_ rec-B renaming (A⊆B to accepts-B⊆B; B⊆A to B⊆accepts-B)
 
---     backward : A ∩ B ⊆ accepts dfa-A∩B
---     backward (a , b) = {!!}
+  rec-A∪B : dfa-A∪B recognizes A ∪ B
+  rec-A∪B = record { A⊆B = forward ; B⊆A = backward }
+    where
+    forward : accepts dfa-A∪B ⊆ A ∪ B
+    forward {ws} rewrite parallel ws = ⊎-map accepts-A⊆A accepts-B⊆B
+
+    backward : A ∪ B ⊆ accepts dfa-A∪B
+    backward {ws} rewrite parallel ws = ⊎-map A⊆accepts-A B⊆accepts-B
+
+∩-regular : ∀ {A B : Language} → regular A → regular B → regular (A ∩ B)
+∩-regular {A} {B} (dfa-A , rec-A) (dfa-B , rec-B) = (dfa-A∩B , rec-A∩B)
+  where
+  open DFA dfa-A using ()
+    renaming (Q to Q₁; δ to δ₁; q₀ to q₁; F to F₁; F? to F₁?; δ̂ to δ̂₁)
+  open DFA dfa-B using ()
+    renaming (Q to Q₂; δ to δ₂; q₀ to q₂; F to F₂; F? to F₂?; δ̂ to δ̂₂)
+
+  dfa-A∩B : DFA
+  dfa-A∩B = record
+    { Q  = Q₁ × Q₂
+    ; δ  = λ a → ×-map (δ₁ a) (δ₂ a)
+    ; q₀ = q₁ , q₂
+    ; F  = F₁ ⟨×⟩ F₂
+    ; F? = F₁? ×? F₂?
+    }
+  open DFA dfa-A∩B using (δ̂; q₀)
+
+  parallel : ∀ ws → δ̂ ws q₀ ≡ (δ̂₁ ws q₁ , δ̂₂ ws q₂)
+  parallel [] = refl
+  parallel (w ∷ ws) rewrite parallel ws = refl
+
+  open _≈_ rec-A renaming (A⊆B to accepts-A⊆A; B⊆A to A⊆accepts-A)
+  open _≈_ rec-B renaming (A⊆B to accepts-B⊆B; B⊆A to B⊆accepts-B)
+
+  rec-A∩B : dfa-A∩B recognizes A ∩ B
+  rec-A∩B = record { A⊆B = forward ; B⊆A = backward }
+    where
+    forward : accepts dfa-A∩B ⊆ A ∩ B
+    forward {ws} rewrite parallel ws = ×-map accepts-A⊆A accepts-B⊆B
+
+    backward : A ∩ B ⊆ accepts dfa-A∩B
+    backward {ws} rewrite parallel ws = ×-map A⊆accepts-A B⊆accepts-B
