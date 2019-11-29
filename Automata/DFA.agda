@@ -26,10 +26,11 @@ record DFA : Set₁ where
   constructor ⟨_,_,_,_,_⟩
   field
     Q  : Set
-    δ  : Σ → Q → Q
-    q₀ : Q
-    F  : Subset Q
-    F? : Decidable F
+    -- {{Q-finite}} : Finite Q
+    δ   : Σ → Q → Q
+    q₀  : Q
+    F   : Subset Q
+    F?  : Decidable F
 
   δ̂ : String → Q → Q
   δ̂ ws q = foldr δ q ws
